@@ -1,0 +1,164 @@
+                   ;
+                   ;------------------------------------------------------------------------------------------
+                   ; Copyright © 2011-2012, Xilinx, Inc.
+                   ; This file contains confidential and proprietary information of Xilinx, Inc. and is
+                   ; protected under U.S. and international copyright and other intellectual property laws.
+                   ;------------------------------------------------------------------------------------------
+                   ;
+                   ; THIS COPYRIGHT NOTICE AND DISCLAIMER MUST BE RETAINED AS PART OF THIS FILE AT ALL TIMES.
+                   ;
+                   ;------------------------------------------------------------------------------------------
+                   ;
+                   ;             _  ______ ____  ____  __  __  __
+                   ;            | |/ / ___|  _ \/ ___||  \/  |/ /_
+                   ;            | ' / |   | |_) \___ \| |\/| | '_ \
+                   ;            | . \ |___|  __/ ___) | |  | | (_) )
+                   ;            |_|\_\____|_|   |____/|_|  |_|\___/
+                   ;
+                   ;
+                   ;                PicoBlaze Reference Design.
+                   ;
+                   ;
+                   ; Ken Chapman - Xilinx Ltd
+                   ;
+                   ; 23rd April 2012 - Initial Release
+                   ; 24th July 2012 - Corrections to comments only
+                   ;
+                   ; This file contains routines used to interface with the UART6 macros provided with KCPSM6
+                   ; and was first supplied with a reference design called 'uart6_605' included in the
+                   ; PicoBlaze package. The routines enable characters to be transmitted to and received
+                   ; from the UART macros as well as perform a reset of the FIFO the buffers.
+                   ;
+                   ;     NOTE - This is not a standalone PSM file. The 'uart_control.psm' file supplied with
+                   ;            the reference design stated above includes this file and calls the routines
+                   ;            contained in this file.
+                   ;
+                   ;                INCLUDE "uart_interface_routines.psm"
+                   ;
+                   ;     Hint - The INCLUDE directive was introduced in KCPSM6 Assembler v2.00.
+                   ;
+                   ;
+                   ;------------------------------------------------------------------------------------------
+                   ; Hardware Constants
+                   ;------------------------------------------------------------------------------------------
+                   ;
+                   ; The CONSTANT directives below define the input and output ports assigned to the UART
+                   ; macros that implement a 115,200 baud rate communication with the USB/UART on the board.
+                   ; Additional constants identify the allocation of signals to bits within a port.
+                   ;
+                   uart3_data_reg equ uart3_data
+                   ;
+                   ; UART Status
+                   ; -----------
+                   ;
+                   uart3_status_port equ 0x04             ; Read status
+                   uart3_tx_data_present equ 0b00000001 ; Tx   data_present - bit0
+                   uart3_tx_half_full equ 0b00000010    ;         half_full - bit1
+                   uart3_tx_full equ 0b00000100         ;              full - bit2
+                   uart3_rx_data_present equ 0b00001000 ; Rx   data_present - bit3
+                   uart3_rx_half_full equ 0b00010000    ;         half_full - bit4
+                   uart3_rx_full equ 0b00100000         ;              full - bit5
+                   ;
+                   ; Write data to UART_TX6
+                   ; ----------------------
+                   ;
+                   uart3_tx6_output_port equ 0x05
+                   ;
+                   ; Read data from UART_RX6
+                   ; -----------------------
+                   ;
+                   uart3_rx6_input_port equ 0x05
+                   ;
+                   ; Reset UART buffers (Constant Optimised Port)
+                   ; --------------------------------------------
+                   ;
+                   reset_uart3_port equ 0x01
+                   uart3_tx_reset equ 0b00000001        ; uart_tx6 reset - bit0
+                   uart3_rx_reset equ 0b00000010        ; uart_rx6 reset - bit1
+                   uart3_reset equ 0b00000011           ; reset Tx and Rx
+                   uart3_operate equ 0b00000000         ; Tx and Rx free to operate
+                   ;
+                   ;
+                   ;--------------------------------------------------------------------------------------
+                   ; Routine to reset UART Buffers inside 'uart_tx6' and 'uart_rx6'
+                   ;--------------------------------------------------------------------------------------
+                   ;
+                   ; This routine will generate and apply an active High reset pulse to  the FIFO
+                   ; buffers in both the transmitter and receiver macros.
+                   ;
+                   ; Note that the reset signals have been assigned to a constant optimised output port
+                   ; so the 'OUTPUTK' instructions are used and no registers contents are affected.
+                   ;
+                   ;
+reset_uart3_macros: outputk #uart3_reset, reset_uart3_port
+                   outputk #uart3_operate, reset_uart3_port
+                   return 
+                   ;
+                   ;
+                   ;--------------------------------------------------------------------------------------
+                   ; Routine to send one character to the UART Transmitter 'uart_tx6'
+                   ;--------------------------------------------------------------------------------------
+                   ;
+                   ; This routine will transmit the character provided in register 'uart_data'.
+                   ;
+                   ; Before the character is output to the 'UART_TX6' macro the status of the FIFO buffer
+                   ; is checked to see if there is space. If the buffer is full then this routine will
+                   ; wait for space to become available (e.g. the time required for a previous character
+                   ; to be transmitted by the UART).
+                   ;
+                   ; Registers used s0 and uart_data for the data (which is preserved)
+                   ;
+    send_to_uart3: input s0, uart3_status_port                ;Check if buffer is full
+                   test s0, #uart3_tx_full
+                   jump nz, send_to_uart3                          ;wait if full
+                   output uart3_data_reg, uart3_tx6_output_port
+                   return 
+                   ;
+                   ;
+                   ;--------------------------------------------------------------------------------------
+                   ; Routine to attempt to receive one character from the UART Receiver 'uart_rx6'
+                   ;--------------------------------------------------------------------------------------
+                   ;
+                   ; This routine will attempt to receive one character from the 'UART_RX6' macro, and if
+                   ; successful, will return that character in register 'uart_data' and the Zero flag will be
+                   ; reset (Z=0).
+                   ;
+                   ; If there are no characters available to be read from the FIFO buffer within the
+                   ; 'UART_RX6' macro then this routine will timeout after ~2,000 clock cycles (which is
+                   ; 40us at 50MHz) with the Zero flag set (Z=1). This timeout scheme ensures that KCPSM6
+                   ; cannot become stuck in this routine if no characters are received. If you do want
+                   ; KCPSM6 to wait indefinitely for a character to be received then either modify this
+                   ; routine or perform a test of the Zero flag and repeat the call to this routine as
+                   ; shown in this example...
+                   ;
+                   ;          wait_for_UART_RX: CALL UART_RX
+                   ;                            JUMP Z, wait_for_UART_RX
+                   ;
+                   ;
+                   ; Registers used s0, s1 and s5.
+                   ;
+read_from_uart3_tout: load s1, #90                      ;Timeout = 125 x (10 instructions x 2 clock cycles)
+       rx3_timeout: input s0, uart3_status_port				 ;250 for 125MHz, 40 for 20MHz
+                   test s0, #uart3_rx_data_present             ;Z=0 and C=1 when data present
+                   jump nz, read_rx3
+                   add s1, #0
+                   add s1, #0
+                   add s1, #0
+                   add s1, #0
+                   sub s1, #1
+                   return z                                  ;Timeout returns with Z=1 and C=0
+                   jump rx3_timeout
+                   ;
+  read_from_uart3: input s0, uart3_status_port				 
+                   test s0, #uart3_rx_data_present           
+                   jump nz, read_rx3
+                   jump read_from_uart3
+                   ;
+          read_rx3: input uart3_data_reg, uart3_rx6_input_port             ;read character from buffer
+                   return 
+                   ;
+                   ;
+                   ;------------------------------------------------------------------------------------------
+                   ; End of 'uart_interface_routines.psm"'
+                   ;------------------------------------------------------------------------------------------
+                   ;

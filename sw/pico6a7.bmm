@@ -1,0 +1,10 @@
+///////////////////////////////////////////////////////////////////////////////
+// Address space 'pico_ram' 0x00000000:0x000003FF (1024 words x16(18))/8
+// INST "procesor/program_rom/ram_1k_generate.akv7.kcpsm6_rom" LOC = RAMB18_X0Y30;
+///////////////////////////////////////////////////////////////////////////////
+
+ADDRESS_SPACE pico_ram RAMB18 INDEX_ADDRESSING [0x00000000:0x000003ff]
+    BUS_BLOCK
+        procesor/program_rom/ram_1k_generate.akv7.kcpsm6_rom [17:0] LOC = X0Y30;
+    END_BUS_BLOCK;
+END_ADDRESS_SPACE;
